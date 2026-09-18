@@ -48,7 +48,7 @@ def gif(query, out, frames, w=1280, h=768, duration=67):
 
 
 if __name__ == "__main__":
-    shot("s=walk&t=16&hour=13", "office-day.png")
+    shot("s=walk&t=40&hour=13", "office-day.png")
     shot("s=idle&t=8&hour=22", "office-night.png")
-    shot("s=mix&t=3&hour=13&hover=developer", "hover-card.png", crop=(40, 280, 700, 580))
+    shot("s=mix&t=3&hour=13&hover=researcher", "hover-card.png", crop=(40, 440, 700, 740))
     gif("s=gif&t=0.3&hour=13&skip=2", "office.gif", 110, duration=90)

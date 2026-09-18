@@ -26,19 +26,19 @@ log('unreachable: ' + (bad.join(' ') || 'none'))
 const hour = q.get('hour')
 const now = hour == null ? undefined : () => { const d = new Date(); d.setHours(Number(hour), 20, 0, 0); return d }
 const P = (profile, over) => ({ profile, online: true, busy: false, task: null, just_done: null, active_sessions: 0, tokens_total: 12345, cost_total: 0.42, ...over })
-const board = { queue: 3, running: 3, blocked: 1, review: 0, done_today: 6 }
+const board = { queue: 1, running: 5, blocked: 0, review: 0, done_today: 6 }
 const names = ['default', 'architect', 'designer', 'developer', 'devops', 'prod-operator', 'researcher', 'reviewer', 'tester']
 const allIdle = names.map((n) => P(n))
 const mix = [
   P('default', { busy: true, tokens_total: 1840000, cost_total: 3.12 }),
-  P('architect', { busy: true, task: { id: 't0', title: 'Спроектировать модуль расписания групп' } }),
-  P('designer', { busy: true, active_sessions: 1 }),
-  P('developer', { busy: true, task: { id: 't1', title: 'Починить экспорт отчётов в CRM и добавить фильтр по филиалу' } }),
-  P('devops', { online: false }),
+  P('architect', { busy: true, task: { id: 't0', title: 'Схема модулей CRM' } }),
+  P('designer', { busy: true, task: { id: 't1', title: 'Стиль: Attack on Titan' } }),
+  P('developer', { queued: { id: 't2', status: 'todo', title: 'Сборка страницы: Attack on Titan' } }),
+  P('devops', { busy: true, task: { id: 't3', title: 'Настроить ночной бэкап базы' } }),
   P('prod-operator'),
-  P('researcher', { busy: true, task: { id: 't2', title: 'Собрать требования CEFR B2 для мок-экзамена' } }),
-  P('reviewer'),
-  P('tester', { just_done: { id: 'd1', title: 'Прогнать тесты плейсмента' } }),
+  P('researcher', { busy: true, task: { id: 't4', title: 'Ресерч: Attack on Titan' } }),
+  P('reviewer', { busy: true, task: { id: 't5', title: 'Ревью: экспорт отчётов' } }),
+  P('tester', { just_done: { id: 'd1', title: 'Проверить вёрстку лендинга' } }),
 ]
 const scene = createScene({ now })
 const step = (sec) => { for (let t = 0; t < sec; t += 1 / 15) scene.update(1 / 15) }

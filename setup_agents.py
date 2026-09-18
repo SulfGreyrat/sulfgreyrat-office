@@ -4,6 +4,7 @@
     python setup_agents.py --dry-run   # только показать, что будет сделано
     python setup_agents.py --no-soul   # не дописывать роль в SOUL.md профилей
     python setup_agents.py --no-alias  # не создавать команды-обёртки (architect, tester, ...)
+    python setup_agents.py --projects-dir D:/Projects   # куда команда складывает результаты
 
 Что делает:
   1. Для каждой роли создаёт профиль Hermes
@@ -16,6 +17,11 @@
      (`kanban.orchestrator_profile: default` в config.yaml, с бэкапом).
   4. Включает оркестратору инструменты Kanban (`toolsets: [hermes-cli, kanban]`),
      чтобы он сам создавал карточки и раздавал задачи.
+  5. Дописывает в SOUL.md основного профиля правила оркестратора: крупные задачи
+     («сделай страницу с ресерчем в стиле X») раздавать команде через kanban_create —
+     researcher и designer параллельно, developer после них — в общей папке проекта.
+     Папка проектов: --projects-dir <путь>, иначе terminal.cwd из config.yaml,
+     иначе ~/hermes-projects.
 
 Описания профилей важны: по ним оркестратор Kanban решает, кому отдать задачу.
 """
@@ -57,6 +63,45 @@ AGENTS = [
      "Ты тестировщик. Проверяй работу запуском и тестами, ищи баги и граничные случаи, "
      "фиксируй результат (что запускал, что получил) в итоговом отчёте."),
 ]
+
+ORCH_BLOCK = """<!-- sulfgreyrat-office:orchestrator -->
+## Ты — Оркестратор команды
+
+У тебя есть команда агентов — профили Hermes:
+- researcher — исследователь: веб-поиск, факты, проверенные ссылки на картинки;
+- designer — дизайнер: стиль, палитра, шрифты, раскладка;
+- developer — разработчик: код, HTML/CSS/JS, проверка запуском;
+- tester, reviewer, architect, devops, prod-operator — по своим ролям.
+
+Пользователь следит за их работой в офисе (плагин SulfGreyrat's office), поэтому
+крупные задачи раздавай команде, а не делай сам.
+
+**Когда раздавать.** Пользователь просит СДЕЛАТЬ результат, для которого нужно несколько
+навыков: страницу, сайт, лендинг, презентацию или отчёт с ресерчем и оформлением,
+небольшое приложение. Вопросы, короткие ответы, мелкие правки и всё, что пользователь
+просит сделать самому или «быстро», — делай сам.
+
+**Как раздавать — только через kanban_create** (не office assign: там нет зависимостей
+и общей папки):
+1. Заведи папку проекта `{projects}/<латинский-slug>` (например `{projects}/attack-on-titan`).
+   Всем задачам ставь `workspace_kind="dir"` и `workspace_path` = эта папка — команда
+   работает в одном месте, результат легко найти.
+2. Типовой конвейер для «страницы с ресерчем в стиле X»:
+   - researcher, «Ресерч: X» — факты (сюжет, мир, персонажи, интересное) и 10–15
+     прямых ссылок на картинки, каждую проверить, что открывается; сохранить `research.md`.
+   - designer, «Стиль: X» — палитра, шрифты Google Fonts, мотивы и раскладка в духе X;
+     сохранить `style.md`. Идёт параллельно с ресерчем, без parents.
+   - developer, «Сборка страницы: X», `parents` = [id ресерча, id стиля] — собрать
+     `index.html` по `research.md` и `style.md`, картинки брать из `research.md`,
+     открыть файл и проверить, что всё на месте.
+   Для других задач подбирай роли по смыслу: 2–4 задачи, не больше; порядок — через parents.
+3. В `body` каждой задачи — полное ТЗ: что сделать, какие файлы прочитать, какой файл
+   сохранить, критерии готовности. Исполнитель видит только `body`.
+4. Сразу ответь пользователю коротко: кто что делает, где будет результат
+   (`{projects}/<slug>/index.html`) и что за работой можно следить в офисе и в Kanban.
+   Саму работу не выполняй.
+<!-- /sulfgreyrat-office:orchestrator -->
+"""
 
 BEGIN = "<!-- sulfgreyrat-office:role -->"
 END = "<!-- /sulfgreyrat-office:role -->"
@@ -144,6 +189,40 @@ def enable_kanban_tools(cfg: Path, dry: bool) -> str:
     return "toolsets: [hermes-cli, kanban] — оркестратор может раздавать задачи (бэкап " + backup.name + ")"
 
 
+def projects_dir(home: Path) -> str:
+    if "--projects-dir" in sys.argv:
+        i = sys.argv.index("--projects-dir")
+        if i + 1 < len(sys.argv):
+            return Path(sys.argv[i + 1]).expanduser().resolve().as_posix()
+    try:
+        import yaml
+        cwd = ((yaml.safe_load((home / "config.yaml").read_text(encoding="utf-8")) or {})
+               .get("terminal") or {}).get("cwd")
+        if cwd and Path(str(cwd)).expanduser().is_absolute():
+            return Path(str(cwd)).expanduser().as_posix()
+    except Exception:
+        pass
+    return (Path.home() / "hermes-projects").as_posix()
+
+
+def write_orchestrator(soul: Path, projects: str, dry: bool) -> str:
+    begin = "<!-- sulfgreyrat-office:orchestrator -->"
+    end = "<!-- /sulfgreyrat-office:orchestrator -->"
+    block = ORCH_BLOCK.replace("{projects}", projects)
+    text = soul.read_text(encoding="utf-8") if soul.is_file() else ""
+    if begin in text:
+        new = re.sub(re.escape(begin) + r".*?" + re.escape(end) + r"\n?", lambda _m: block, text, flags=re.S)
+        verdict = "правила оркестратора обновлены" if new != text else "правила оркестратора уже на месте"
+    else:
+        new = text.rstrip("\n") + ("\n\n" if text.strip() else "") + block
+        verdict = "правила оркестратора дописаны в SOUL.md"
+    if not dry and new != text:
+        if soul.is_file():
+            shutil.copy2(soul, soul.with_name(soul.name + ".bak-agents-" + time.strftime("%Y%m%d-%H%M%S")))
+        soul.write_text(new, encoding="utf-8")
+    return verdict + f" (папка проектов: {projects})"
+
+
 def main() -> None:
     dry = "--dry-run" in sys.argv
     soul = "--no-soul" not in sys.argv
@@ -168,6 +247,9 @@ def main() -> None:
     print("\n[kanban]")
     print("  ", pin_orchestrator(home / "config.yaml", dry))
     print("  ", enable_kanban_tools(home / "config.yaml", dry))
+
+    print("\n[orchestrator]")
+    print("  ", write_orchestrator(home / "SOUL.md", projects_dir(home), dry))
     print("\nГотово. Дальше: включите Kanban в Hermes Desktop (Settings > Plugins) и держите "
           "gateway запущенным — диспетчер задач живёт в нём.")
 

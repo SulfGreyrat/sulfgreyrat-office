@@ -1394,6 +1394,10 @@ function createScene(opts) {
       return { text: a.role.boss ? 'Отвечает вам в чате…' : 'Работает в чате…', kind: 'task' }
     }
     if (a.bubble) return a.bubble
+    const q = a.info && a.info.queued
+    if (q && q.title && a.state === 'idle') {
+      return { text: (q.status === 'ready' ? '▶ Сейчас возьмёт: ' : '⏳ Ждёт: ') + q.title, kind: 'queued' }
+    }
     return null
   }
 
@@ -1471,8 +1475,8 @@ function createScene(opts) {
       const bh = lines.length * (fs + 2 * dpr) + 6 * dpr
       const bx = Math.max(ox + 2, Math.min(cx - bw / 2, ox + W * s - bw - 2))
       const br = settle({ x: bx, y: lr.y - 4 * dpr - bh, w: bw, h: bh }, bh / 2 + pad)
-      const fill = bt.kind === 'done' ? '#e9fff1' : bt.kind === 'task' ? '#ffffff' : '#fffbe6'
-      const border = bt.kind === 'done' ? '#1e7a42' : bt.kind === 'task' ? '#1b1d22' : '#a07800'
+      const fill = { done: '#e9fff1', task: '#ffffff', queued: '#eef4ff' }[bt.kind] || '#fffbe6'
+      const border = { done: '#1e7a42', task: '#1b1d22', queued: '#1f4fbf' }[bt.kind] || '#a07800'
       box(ctx, br.x, br.y, bw, bh, fill, border, Math.max(1, Math.round(1.5 * dpr)))
       ctx.fillStyle = border
       ctx.fillRect(Math.round(cx - 2 * dpr), Math.round(br.y + bh), Math.round(4 * dpr), Math.round(Math.max(3 * dpr, lr.y - br.y - bh)))
@@ -1492,6 +1496,9 @@ function createScene(opts) {
         [st, 600, a.state === 'busy' ? '#6dffb0' : a.state === 'idle' ? '#ffe066' : '#9aa1aa'],
       ]
       if (info.task && info.task.title) rows.push(['Задача: ' + info.task.title, 500, '#dfe3ea'])
+      else if (info.queued && info.queued.title) {
+        rows.push([(info.queued.status === 'ready' ? 'Сейчас возьмёт: ' : 'Ждёт: ') + info.queued.title, 500, '#b9d1ff'])
+      }
       rows.push(['Токены: ' + compact(info.tokens_total || 0) + '  ·  $' + Number(info.cost_total || 0).toFixed(2), 500, '#aeb5bf'])
       ctx.font = font(fs, 600)
       const maxW = 300 * dpr
@@ -1710,7 +1717,7 @@ function Legend({ snapshot }) {
     className: 'flex flex-wrap gap-1.5',
     children: ps.map((p) => {
       const r = roleOf(p.profile)
-      const st = p.busy ? 'работает' : p.online ? 'свободен' : 'не на смене'
+      const st = p.busy ? 'работает' : !p.online ? 'не на смене' : p.queued ? 'ждёт задачу' : 'свободен'
       const title = p.task && p.task.title ? p.task.title : undefined
       return jsxs(
         'div',

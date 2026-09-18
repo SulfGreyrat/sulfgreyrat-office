@@ -235,6 +235,16 @@ def _board(now: float) -> Dict[str, Any]:
         just_done.setdefault(str(assignee), {
             "id": tid, "title": str(title or "")[:160], "completed_at": completed})
 
+    # следующая задача агента: ready — возьмёт вот-вот, todo — ждёт родительские
+    queued: Dict[str, Dict[str, Any]] = {}
+    for tid, assignee, title, status in _query(
+            path, "SELECT id, assignee, title, status FROM tasks "
+                  "WHERE status IN ('ready', 'todo', 'scheduled') AND assignee IS NOT NULL "
+                  "ORDER BY CASE status WHEN 'ready' THEN 0 ELSE 1 END, "
+                  "priority DESC, created_at"):
+        queued.setdefault(str(assignee), {
+            "id": tid, "title": str(title or "")[:160], "status": status})
+
     return {
         "queue": sum(counts.get(s, 0) for s in ("triage", "todo", "scheduled", "ready")),
         "running": counts.get("running", 0),
@@ -243,6 +253,7 @@ def _board(now: float) -> Dict[str, Any]:
         "done_today": int(done_today[0][0]) if done_today else 0,
         "_running": running,
         "_just_done": just_done,
+        "_queued": queued,
     }
 
 
@@ -258,6 +269,7 @@ def _collect() -> Dict[str, Any]:
     board = _board(now)
     running = board.pop("_running")
     just_done = board.pop("_just_done")
+    queued = board.pop("_queued")
 
     profiles = []
     for name in _discover_profiles():
@@ -270,6 +282,7 @@ def _collect() -> Dict[str, Any]:
             "busy": busy,
             "task": task,
             "just_done": None if busy else just_done.get(name),
+            "queued": None if busy else queued.get(name),
             **stats,
         })
 
