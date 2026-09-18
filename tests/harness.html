@@ -1,0 +1,83 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>harness</title>
+<style>body{margin:0;background:#16171b;color:#ddd;font:12px monospace}canvas{display:block}</style>
+<script type="importmap">{"imports":{
+  "@hermes/plugin-sdk":"./stub-sdk.js","react":"./stub-react.js","react/jsx-runtime":"./stub-jsx.js"}}</script>
+</head><body><canvas id="c"></canvas><pre id="log"></pre><pre id="frames"></pre>
+<script type="module">
+// Офлайн-проверка сцены SulfGreyrat's office.
+// ?s=mix|walk|idle|off|gif  &t=<сек после смены>  &hour=<0..23>  &hover=<profile>
+// &w=1600&h=960  &frames=<N> (для GIF: кадры в #frames как data URL)
+import { __test } from '../desktop-plugins/sulfgreyrat-office/plugin.js'
+const { createScene, SEATS, IDLE_SPOTS, buildGrid, bfs } = __test
+const log = (s) => (document.getElementById('log').textContent += s + '\n')
+const q = new URLSearchParams(location.search)
+const scenario = q.get('s') || 'mix'
+const cv = document.getElementById('c')
+cv.width = Number(q.get('w') || 1600)
+cv.height = Number(q.get('h') || 960)
+const ctx = cv.getContext('2d')
+
+const grid = buildGrid()
+const bad = []
+for (const p of [...SEATS, ...IDLE_SPOTS]) if (bfs(grid, 32, 23, p.x, p.y) === null) bad.push(p.x + ',' + p.y)
+log('unreachable: ' + (bad.join(' ') || 'none'))
+
+const hour = q.get('hour')
+const now = hour == null ? undefined : () => { const d = new Date(); d.setHours(Number(hour), 20, 0, 0); return d }
+const P = (profile, over) => ({ profile, online: true, busy: false, task: null, just_done: null, active_sessions: 0, tokens_total: 12345, cost_total: 0.42, ...over })
+const board = { queue: 3, running: 3, blocked: 1, review: 0, done_today: 6 }
+const names = ['default', 'architect', 'designer', 'developer', 'devops', 'prod-operator', 'researcher', 'reviewer', 'tester']
+const allIdle = names.map((n) => P(n))
+const mix = [
+  P('default', { busy: true, tokens_total: 1840000, cost_total: 3.12 }),
+  P('architect', { busy: true, task: { id: 't0', title: 'Спроектировать модуль расписания групп' } }),
+  P('designer', { busy: true, active_sessions: 1 }),
+  P('developer', { busy: true, task: { id: 't1', title: 'Починить экспорт отчётов в CRM и добавить фильтр по филиалу' } }),
+  P('devops', { online: false }),
+  P('prod-operator'),
+  P('researcher', { busy: true, task: { id: 't2', title: 'Собрать требования CEFR B2 для мок-экзамена' } }),
+  P('reviewer'),
+  P('tester', { just_done: { id: 'd1', title: 'Прогнать тесты плейсмента' } }),
+]
+const scene = createScene({ now })
+const step = (sec) => { for (let t = 0; t < sec; t += 1 / 15) scene.update(1 / 15) }
+if (scenario === 'mix') {
+  scene.setData({ profiles: mix, board, gateway_online: true })
+  step(Number(q.get('t') || 2.5))
+} else if (scenario === 'walk' || scenario === 'gif') {
+  scene.setData({ profiles: allIdle, board, gateway_online: true })
+  step(3)
+  scene.setData({ profiles: mix, board, gateway_online: true })
+  step(Number(q.get('t') || 0))
+} else if (scenario === 'idle') {
+  scene.setData({ profiles: allIdle, board: { queue: 0, running: 0, blocked: 0, done_today: 4 }, gateway_online: true })
+  step(Number(q.get('t') || 6))
+} else if (scenario === 'off') {
+  scene.setData({ profiles: allIdle.map((p) => ({ ...p, online: false })), board: { queue: 0, running: 0, blocked: 0, done_today: 0 }, gateway_online: false })
+  step(1)
+}
+scene.render(ctx, cv.width, cv.height, 1)
+if (q.get('hover')) {
+  const a = scene.agents.get(q.get('hover'))
+  let s = Math.min(cv.width / 640, cv.height / 384)
+  if (s >= 1 && Math.floor(s) / s > 0.8) s = Math.floor(s)
+  const ox = Math.floor((cv.width - 640 * s) / 2), oy = Math.floor((cv.height - 384 * s) / 2)
+  scene.mouse.x = ox + a.x * s
+  scene.mouse.y = oy + (a.y - 8) * s
+  scene.render(ctx, cv.width, cv.height, 1)
+}
+const n = Number(q.get('frames') || 0)
+if (n) {
+  const out = []
+  const skip = Number(q.get('skip') || 1)
+  for (let i = 0; i < n; i++) {
+    for (let k = 0; k < skip; k++) scene.update(1 / 15)
+    scene.render(ctx, cv.width, cv.height, 1)
+    out.push(cv.toDataURL('image/png'))
+  }
+  document.getElementById('frames').textContent = out.join('\n')
+}
+for (const a of scene.agents.values()) log(`${a.name}: ${a.state} vis=${a.visible} act=${a.act} path=${a.path.length}`)
+document.title = 'READY'
+</script></body></html>

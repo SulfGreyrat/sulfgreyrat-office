@@ -1,0 +1,4 @@
+__pycache__/
+*.pyc
+tests/.edge-profile/
+docs/_tmp.png
